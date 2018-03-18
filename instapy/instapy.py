@@ -4,6 +4,7 @@ import json
 import logging
 from math import ceil
 import os
+from platform import python_version
 from datetime import datetime
 from sys import maxsize
 import random
@@ -62,6 +63,7 @@ class InstaPy:
                  show_logs=True,
                  headless_browser=False,
                  proxy_address=None,
+                 proxy_chrome_extension=None,
                  proxy_port=0,
                  bypass_suspicious_attempt=False,
                  multi_logs=False):
@@ -74,6 +76,7 @@ class InstaPy:
         self.headless_browser = headless_browser
         self.proxy_address = proxy_address
         self.proxy_port = proxy_port
+        self.proxy_chrome_extension = proxy_chrome_extension
 
         self.username = username or os.environ.get('INSTA_USER')
         self.password = password or os.environ.get('INSTA_PW')
@@ -160,7 +163,7 @@ class InstaPy:
             file_handler = logging.FileHandler( '{}general.log'.format(self.logfolder))
             file_handler.setLevel(logging.DEBUG)
             extra = {"username": self.username}
-            logger_formatter = logging.Formatter('%(levelname)s [%(username)s]  %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            logger_formatter = logging.Formatter('%(levelname)s [%(asctime)s] [%(username)s]  %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
             file_handler.setFormatter(logger_formatter)
             logger.addHandler(file_handler)
 
@@ -221,6 +224,9 @@ class InstaPy:
                 user_agent = "Chrome"
                 chrome_options.add_argument('user-agent={user_agent}'
                                             .format(user_agent=user_agent))
+            # add proxy extension
+            if self.proxy_chrome_extension and not self.headless_browser:
+                chrome_options.add_extension(self.proxy_chrome_extension)
 
             chrome_prefs = {
                 'intl.accept_languages': 'en-US'
@@ -476,6 +482,7 @@ class InstaPy:
 
             if self.follow_restrict.get(acc_to_follow, 0) < self.follow_times:
                 followed += follow_given_user(self.browser,
+                                              self.username,
                                               acc_to_follow,
                                               self.follow_restrict,
                                               self.blacklist,
@@ -961,6 +968,7 @@ class InstaPy:
         if self.aborting:
             return self
 
+        liked_img = 0
         total_liked_img = 0
         already_liked = 0
         inap_img = 0
@@ -1158,6 +1166,9 @@ class InstaPy:
             # Reset like counter for every username
             liked_img = 0
 
+            # Will we follow this user?
+            following = random.randint(0, 100) <= self.follow_percentage
+
             for i, link in enumerate(links):
                 # Check if target has reached
                 if liked_img >= amount:
@@ -1184,8 +1195,6 @@ class InstaPy:
 
                     if not inappropriate:
 
-                        following = (
-                            random.randint(0, 100) <= self.follow_percentage)
                         if (self.do_follow and
                             username not in self.dont_include and
                             following and
@@ -1200,6 +1209,8 @@ class InstaPy:
                                 self.blacklist,
                                 self.logger,
                                 self.logfolder)
+
+                            following = False
                         else:
                             self.logger.info('--> Not following')
                             sleep(1)
@@ -1487,11 +1498,20 @@ class InstaPy:
                        onlyInstapyFollowed=False,
                        onlyInstapyMethod='FIFO',
                        sleep_delay=600,
-                       onlyNotFollowMe=False):
+                       onlyNotFollowMe=False,
+                       unfollow_after=None):
         """Unfollows (default) 10 users from your following list"""
-        self.automatedFollowedPool = set_automated_followed_pool(self.username,
-                                                                 self.logger,
-                                                                 self.logfolder)
+        
+        if unfollow_after is not None:
+            if not python_version().startswith(('2.7', '3')):
+                self.logger.info("`unfollow_after` argument is not available for Python versions below 2.7")
+                unfollow_after = None
+        
+        if onlyInstapyFollowed:
+            self.automatedFollowedPool = set_automated_followed_pool(self.username,
+                                                                     self.logger,
+                                                                     self.logfolder,
+                                                                     unfollow_after)
 
         try:
             unfollowNumber = unfollow(self.browser,
