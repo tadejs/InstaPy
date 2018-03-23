@@ -22,4 +22,5 @@ setup(
     description=description,
     install_requires=requirements,
     packages=['instapy']
+    include_package_data=True,
 )
